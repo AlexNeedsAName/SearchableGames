@@ -127,7 +127,7 @@ class BubbleSortGame:
             if not (555 < area < 1155):  # TODO: hardcoded areas
                 continue
             x, y, w, h = cv2.boundingRect(contour)
-            center = (int(x + w / 2), int(y + h / 2))
+            # center = (int(x + w / 2), int(y + h / 2))
             # cv2.circle(img, center=center, radius=5, color=(0, 0, 0), thickness=-1)
             # TODO: Hardcoded proportions
             self.radius = int(0.34 * w)
@@ -150,8 +150,6 @@ class BubbleSortGame:
                 tube.append(color_index)
             self.state.append(tube)
         cv2.imshow("screenshot", img)
-        self.show("Steps")
-        cv2.waitKey()
         assert len(self.colors) == len(self.state) - 2
 
     def generateSuccessors(self):
@@ -174,6 +172,19 @@ class BubbleSortGame:
         result.state = new_state
         return result
 
+    def removeFrom(self, tube_from):
+        result = copy.copy(self)
+        new_state = [tube.copy() for tube in self.state]
+        new_state[tube_from].pop()
+        result.state = new_state
+        return result
+
+    def top(self, tube):
+        return getTopBall(self.state[tube])
+
+    def count(self, tube):
+        return len(self.state[tube])
+
     def isWinState(self):
         return hash(self) == win_hash(len(self.state))
 
@@ -191,8 +202,7 @@ class BubbleSortGame:
         #             return False
         # return True
 
-    def show(self, window):
-        print("Showing {} on window {}".format(self, window))
+    def show(self):
         width, height = window_size
         img = np.ones((height, width, 3), dtype=np.uint8) * 255
         for i, tube in enumerate(self.state):
@@ -202,7 +212,7 @@ class BubbleSortGame:
                 cv2.circle(img, center=(x, y), radius=self.radius, color=color, thickness=-1)
                 cv2.circle(img, center=(x, y), radius=self.radius, color=(0, 0, 0), thickness=1)
                 cv2.putText(img, str(key[color_key]), (x - 10, y + 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
-        cv2.imshow(window, img)
+        return img
 
     def __str__(self):
         tube_strings = [''.join([key[color] for color in tube] + ['_' for _ in range(self.height - len(tube))])
@@ -233,10 +243,20 @@ def minimize_color_changes(state, problem=None):
     return approx
 
 
+def bezier_ease(t):
+    return t * t * (3 - 2 * t)
+
+
+def weighted_average(t1, t2, w):
+    return tuple(x * (1 - w) + y * w for x, y in zip(t1, t2))
+
+
 def run_test(num_tubes, name=None, wait=False):
     if name is None:
         name = num_tubes
     start_state = BubbleSortGame("ref/{}.PNG".format(name))
+    cv2.imshow("Steps", start_state.show())
+    cv2.waitKey()
     problem = BubbleSortSearch(start_state)
     solutions = search.astar(problem, heuristic=minimize_color_changes, find_all=True)
     if len(solutions) == 0:
@@ -248,14 +268,36 @@ def run_test(num_tubes, name=None, wait=False):
     for solution in solutions[:1]:
         state = start_state
         for tube_from, tube_to in solution:
+            keyframes = (
+                state.positions[tube_from][state.count(tube_from) - 1], state.positions[tube_from][state.height],
+                state.positions[tube_to][state.height], state.positions[tube_to][state.count(tube_to)]
+            )
+            radius = state.radius
+            color_key = state.top(tube_from)
+            color = state.colors[color_key]
+            color_key = str(key[color_key])
+            base_img = state.removeFrom(tube_from).show()
             state = state.doMove(tube_from, tube_to)
-            state.show("Steps")
             if wait:
                 cv2.waitKey()
-            else:
-                cv2.waitKey(100)
+
+            frames = (4, 12, 4)
+            framerate = 60
+            for p0, p1, frames in zip(keyframes, keyframes[1:], frames):
+                for i in range(frames):
+                    img = base_img.copy()
+                    t = i / (frames - 1)
+                    p = weighted_average(p0, p1, bezier_ease(t))
+                    p = tuple(int(i) for i in p)
+                    cv2.circle(img, center=p, radius=radius, color=color, thickness=-1)
+                    cv2.circle(img, center=p, radius=radius, color=(0, 0, 0), thickness=1)
+                    cv2.putText(img, color_key, (p[0] - 10, p[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
+                    cv2.imshow("Steps", img)
+                    cv2.waitKey(int(1000 / framerate))
+                cv2.waitKey(int(1000 / framerate))
+
         print(len(solution), "steps")
-    cv2.waitKey()
+        cv2.waitKey()
 
 
 if __name__ == "__main__":
@@ -265,5 +307,8 @@ if __name__ == "__main__":
     # cv2.setWindowProperty("Steps", cv2.WND_PROP_TOPMOST, 1)
     cv2.moveWindow("Steps", 425, 0)
     cv2.moveWindow("screenshot", 425 * 2, 0)
-    run_test(15, "5-3")
-    # run_test(5)
+    # run_test(15, "5-3")
+    for i in range(5, 16):
+        if i == 13:
+            continue
+        run_test(i)
