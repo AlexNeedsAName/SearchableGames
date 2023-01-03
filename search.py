@@ -90,7 +90,8 @@ class SearchNode:
         return "SearchNode({})".format(str(self))
 
 
-def genericSearch(problem, cost_funct=lambda node: 0, depth_limit=float('inf')):
+def genericSearch(problem, cost_funct=lambda node: 0, depth_limit=float('inf'), find_all=False):
+    solutions = []
     fringe = util.PriorityQueue()
 
     start = problem.getStartState()
@@ -106,14 +107,19 @@ def genericSearch(problem, cost_funct=lambda node: 0, depth_limit=float('inf')):
         node = fringe.pop()
         if node.state in closed:
             continue
-        closed.add(node.state)
         if len(closed) > last_closed_size + 1000:
-            print("Closed: {}\nFringe: {}".format(len(closed), len(fringe)))
+            print("Closed: {}\nFringe: {}\nSolutions: {}".format(len(closed), len(fringe), len(solutions)))
             last_closed_size += 1000
         # print(node)
         if problem.isGoalState(node.state):
             print("Found goal state:\n{}".format(node))
-            return node.path
+            if find_all:
+                solutions.append(node.path)
+                continue
+            else:
+                return node.path
+        else:
+            closed.add(node.state)
         if node.depth >= depth_limit:
             continue
         for successor in problem.getSuccessors(node.state):
@@ -124,17 +130,20 @@ def genericSearch(problem, cost_funct=lambda node: 0, depth_limit=float('inf')):
                 fringe.push(new_node, cost_funct(new_node))
                 # visited.add(state)
 
-    return None
+    if find_all:
+        return solutions
+    else:
+        return None
 
 
-def depthFirstSearch(problem):
+def depthFirstSearch(problem, find_all=False):
     """Search the deepest nodes in the search tree first."""
-    return genericSearch(problem, lambda node: -node.depth)
+    return genericSearch(problem, lambda node: -node.depth, find_all=find_all)
 
 
-def breadthFirstSearch(problem):
+def breadthFirstSearch(problem, find_all=False):
     """Search the shallowest nodes in the search tree first."""
-    return genericSearch(problem, lambda node: node.depth)
+    return genericSearch(problem, lambda node: node.depth, find_all=find_all)
 
 
 def iterativeDeepeningSearch(problem):
@@ -146,9 +155,9 @@ def iterativeDeepeningSearch(problem):
         i = i + 1
 
 
-def uniformCostSearch(problem):
+def uniformCostSearch(problem, find_all=False):
     """Search the node of least total cost first."""
-    return genericSearch(problem, lambda node: node.cost)
+    return genericSearch(problem, lambda node: node.cost, find_all=find_all)
     # Alternatively and equivalently:
     # return aStarSearch(problem, nullHeuristic)
 
@@ -161,13 +170,13 @@ def nullHeuristic(state, problem=None):
     return 0
 
 
-def greedySearch(problem, heuristic=nullHeuristic):
-    return genericSearch(problem, lambda node: heuristic(node.state, node.problem))
+def greedySearch(problem, heuristic=nullHeuristic, find_all=False):
+    return genericSearch(problem, lambda node: heuristic(node.state, node.problem), find_all=find_all)
 
 
-def aStarSearch(problem, heuristic=nullHeuristic):
+def aStarSearch(problem, heuristic=nullHeuristic, find_all=False):
     """Search the node that has the lowest combined cost and heuristic first."""
-    return genericSearch(problem, lambda node: (node.cost + heuristic(node.state, node.problem)))
+    return genericSearch(problem, lambda node: (node.cost + heuristic(node.state, node.problem)), find_all=find_all)
 
 
 # Abbreviations

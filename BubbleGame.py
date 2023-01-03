@@ -1,9 +1,9 @@
-import cv2
-from dataclasses import dataclass
 import math
-import search
 
+import cv2
 import numpy as np
+
+import search
 
 key = [str(i)[0] for i in range(0, 10)] \
       + [chr(i) for i in range(ord('A'), ord('Z') + 1)] \
@@ -31,9 +31,9 @@ def update_average(sample, average, size):
 
 # Creates a pallet of colors from samples of colors, merging samples that are close enough
 class Pallet:
-    def __init__(self, dist_function=math.dist, min_dist=15):
-        self._colors = [(255,255,255)]
-        self._samples = [1]
+    def __init__(self, dist_function=math.dist, min_dist=30):
+        self._colors = []
+        self._samples = []
         self._dist = dist_function
         self._min_dist = min_dist
 
@@ -49,11 +49,28 @@ class Pallet:
         self._samples.append(1)
         return len(self._colors) - 1
 
+    def add(self, sample):
+        self.index(sample)
+        return self
+
     def __len__(self):
-        return len(self._colors) - 1
+        return len(self._colors)
 
     def __getitem__(self, index):
         return tuple(int(x) for x in self._colors[index])
+
+    def __contains__(self, sample):
+        for color in self._colors:
+            if self._dist(sample, color) < self._min_dist:
+                return True
+        return False
+
+    def __str__(self):
+        return str(self._colors)
+
+
+empty = Pallet().add((255, 255, 255)).add((232, 232, 232))
+print("Empty: {}".format(empty))
 
 
 class Size:
@@ -84,31 +101,6 @@ sizes = {
 }
 
 
-# def add_tuples(a, b):
-#     return tuple(ai + bi for ai, bi in zip(a, b))
-#
-#
-# class Color:
-#     def __init__(self, array):
-#         self.b, self.g, self.r = array
-#
-#     def __str__(self):
-#         return "#{:02X}{:02X}{:02X}".format(self.r, self.g, self.b)
-#
-#     @classmethod
-#     def from_string(cls, string):
-#         n = 2
-#         string = string[1:]
-#         r, g, b = [int(string[i:i + n], 16) for i in range(0, len(string), n)]
-#         return cls((b, g, r))
-#
-#     def to_bgr(self):
-#         return self.b, self.g, self.r
-#
-#     def to_rgb(self):
-#         return self.r, self.g, self.b
-
-
 class BubbleSortSearch(search.SearchProblem):
     def __init__(self, start_state):
         print("Created search problem for {} {}".format(len(start_state.state), start_state))
@@ -128,8 +120,9 @@ class BubbleSortSearch(search.SearchProblem):
 
 
 class BubbleSortGame:
-    def __init__(self, tubes, source, colors=None, positions=None, height=4):
+    def __init__(self, tubes, source, colors=None, positions=None, height=4, moves=0):
         self.state = []
+        self.moves = moves
 
         if colors is None:
             colors = Pallet()
@@ -159,21 +152,25 @@ class BubbleSortGame:
             self.state = source
         else:
             img = cv2.imread(source, cv2.IMREAD_COLOR)
-            for i in range(tubes - 2):
+            for i in range(tubes):
                 tube = []
                 for j in range(height):
                     x, y = self.positions[i][j]
+                    color = img[y, x]
                     # print("Color = {} = {}".format(img[y, x], color))
-                    tube.append(self.colors.index(img[y, x]))
+                    if color in empty:
+                        break
+                    color_index = self.colors.index(color)
+                    tube.append(color_index)
                 self.state.append(tube)
             print(len(self.colors), len(self.state))
-            assert len(self.colors) == len(self.state)
-            self.state.append([])
-            self.state.append([])
             print(colors)
             cv2.imshow("screenshot", img)
             self.show("Steps")
             cv2.waitKey()
+            assert len(self.colors) == len(self.state) - 2
+
+        self.win = ' '.join([key[color] * 4 for color in range(1, len(self.state) - 1)] + ["____"] * 2)
 
     def generateSuccessors(self):
         successors = []
@@ -191,9 +188,11 @@ class BubbleSortGame:
     def doMove(self, tube_from, tube_to):
         new_state = [tube.copy() for tube in self.state]
         new_state[tube_to].append(new_state[tube_from].pop())
-        return BubbleSortGame(len(new_state), new_state, self.colors, self.positions, self.height)
+        return BubbleSortGame(len(new_state), new_state, self.colors, self.positions, self.height, self.moves + 1)
 
     def isWinState(self):
+        # return hash(self) == hash(self.win)
+
         for tube in self.state:
             # Each tube must either be empty or full
             if len(tube) == 0:
@@ -211,8 +210,8 @@ class BubbleSortGame:
     def show(self, window):
         print("Showing {} on window {}".format(self, window))
         width, height = window_size
-        img = np.ones((height, width, 1), dtype=np.uint8) * 255
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        img = np.ones((height, width, 3), dtype=np.uint8) * 255
+        # img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         for i, tube in enumerate(self.state):
             for j, color_key in enumerate(tube):
                 x, y = self.positions[i][j]
@@ -222,6 +221,7 @@ class BubbleSortGame:
                            color=color, thickness=-1)
                 cv2.circle(img, center=(x, y), radius=int(sizes[len(self.state)].radius - 2),
                            color=(0, 0, 0), thickness=1)
+                cv2.putText(img, str(key[color_key]), (x - 9, y + 9), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
         cv2.imshow(window, img)
 
     def __str__(self):
@@ -253,39 +253,64 @@ def minimize_color_changes(state, problem=None):
     return approx
 
 
+def minimize_color_changes2(state, problem=None):
+    approx = 0
+    for tube in state.state:
+        if len(tube) == 0:
+            continue
+        last = tube[0]
+        for ball in tube[1:]:
+            if last != ball:
+                approx *= 2
+                last = ball
+    return approx
+
+
 def run_test(num_tubes, name=None, wait=False):
     if name is None:
         name = num_tubes
-    state = BubbleSortGame(num_tubes, "ref/{}.PNG".format(name))
-    problem = BubbleSortSearch(state)
+    start_state = BubbleSortGame(num_tubes, "ref/{}.PNG".format(name))
+    problem = BubbleSortSearch(start_state)
     # solution = search.astar(problem)
-    solution = search.astar(problem, minimize_color_changes)
-    for tube_from, tube_to in solution:
-        state = state.doMove(tube_from, tube_to)
-        state.show("Steps")
-        if wait:
-            cv2.waitKey()
-        else:
-            cv2.waitKey(100)
-    print(len(solution), "steps")
+    # solutions = search.astar(problem, find_all=True)
+    solutions = search.astar(problem, heuristic=minimize_color_changes, find_all=True)
+    if len(solutions) == 0:
+        print("No solution")
+    else:
+        print("Found {} solutions".format(len(solutions)))
+    # for solution in solutions:
+    #     print("{} Moves".format(len(solution)))
+    for solution in solutions[:1]:
+        state = BubbleSortGame(len(start_state.state), start_state.state, start_state.colors, start_state.positions,
+                               start_state.height)
+        for tube_from, tube_to in solution:
+            state = state.doMove(tube_from, tube_to)
+            state.show("Steps")
+            if wait:
+                cv2.waitKey()
+            else:
+                cv2.waitKey(100)
+        print(len(solution), "steps")
     cv2.waitKey()
 
 
 if __name__ == "__main__":
     cv2.namedWindow("Steps")
     cv2.namedWindow("screenshot")
-    # cv2.setWindowProperty("screenshot", cv2.WND_PROP_TOPMOST, 1)
-    # cv2.setWindowProperty("Steps", cv2.WND_PROP_TOPMOST, 1)
+    cv2.setWindowProperty("screenshot", cv2.WND_PROP_TOPMOST, 1)
+    cv2.setWindowProperty("Steps", cv2.WND_PROP_TOPMOST, 1)
+    cv2.setWindowProperty("screenshot", cv2.WND_PROP_TOPMOST, 0)
+    cv2.setWindowProperty("Steps", cv2.WND_PROP_TOPMOST, 0)
     cv2.moveWindow("Steps", 425, 0)
     cv2.moveWindow("screenshot", 425 * 2, 0)
-    # run_test(5)
+    # run_test(5, wait=True)
     # run_test(6)
     # run_test(7)
     # run_test(8)
-    # run_test(11)
+    # run_test(11, wait=True)
     # run_test(12)
     # run_test(14)
     # run_test(15)
-    # run_test(15, "5-3")
+    run_test(15, "5-3")
     # print(solution)
     # cv2.waitKey()
