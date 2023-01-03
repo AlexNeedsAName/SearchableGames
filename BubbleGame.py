@@ -74,8 +74,6 @@ class Pallet:
 empty = Pallet().add((255, 255, 255)).add((232, 232, 232))
 print("Empty: {}".format(empty))
 
-window_size = (750, 1334)
-
 
 class BubbleSortSearch(search.SearchProblem):
     def __init__(self, start_state):
@@ -120,6 +118,7 @@ class BubbleSortGame:
         # Find the positions of each slot
         self.positions = []
         img = cv2.imread(source, cv2.IMREAD_COLOR)
+        self.blank = np.ones_like(img) * 255
         thresh = cv2.inRange(img, (238 - 10, 192 - 10, 87 - 10), (238 + 10, 192 + 10, 87 + 10))  # TODO: hardcoded color
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for contour in contours:
@@ -127,15 +126,28 @@ class BubbleSortGame:
             if not (555 < area < 1155):  # TODO: hardcoded areas
                 continue
             x, y, w, h = cv2.boundingRect(contour)
-            # center = (int(x + w / 2), int(y + h / 2))
-            # cv2.circle(img, center=center, radius=5, color=(0, 0, 0), thickness=-1)
+            y = y + h / 2
+
+            cx = x + w / 2
+            cy = y + h / 2
+
             # TODO: Hardcoded proportions
             self.radius = int(0.34 * w)
             spacing = 0.70 * w
             offset = 2.76 * w
+            b = spacing * 0.6
+
+            # Draw test tube border
+            cv2.line(self.blank, (int(cx - b), int(cy)), (int(cx - b), int(cy + offset)), (0, 0, 0), 1)
+            cv2.line(self.blank, (int(cx + b), int(cy)), (int(cx + b), int(cy + offset)), (0, 0, 0), 1)
+            cv2.ellipse(self.blank, (int(cx), int(cy+offset)), (int(b), int(b)), 0, 0, 180, (0, 0, 0), 1)
+
+            # Draw test tube top
+            cv2.line(self.blank, (int(x + h / 2), int(cy)), (int(x + w - h / 2), int(cy)), (0, 0, 0), thickness=h + 2)
+            cv2.line(self.blank, (int(x + h / 2), int(cy)), (int(x + w - h / 2), int(cy)), (238, 192, 87), thickness=h)
 
             x = int(x + w / 2)
-            y = y + h / 2 + offset
+            y = cy + offset
             self.positions.append([(x, int(y - i * spacing)) for i in itertools.chain(range(height), (height + 1.5,))])
 
         # Record the colors in each spot
@@ -188,23 +200,9 @@ class BubbleSortGame:
     def isWinState(self):
         return hash(self) == win_hash(len(self.state))
 
-        # for tube in self.state:
-        #     # Each tube must either be empty or full
-        #     if len(tube) == 0:
-        #         continue
-        #     if len(tube) != self.height:
-        #         return False
-        #
-        #     # Full tubes should only contain one color
-        #     bottom_ball = tube[0]
-        #     for ball in tube[1:]:
-        #         if ball != bottom_ball:
-        #             return False
-        # return True
-
     def show(self):
-        width, height = window_size
-        img = np.ones((height, width, 3), dtype=np.uint8) * 255
+        img = self.blank.copy()
+        # img = np.ones((height, width, 3), dtype=np.uint8) * 255
         for i, tube in enumerate(self.state):
             for j, color_key in enumerate(tube):
                 x, y = self.positions[i][j]
@@ -243,6 +241,11 @@ def minimize_color_changes(state, problem=None):
     return approx
 
 
+def parametric_ease(t):
+    sqt = t * t
+    return sqt / (2 * (sqt - t) + 1)
+
+
 def bezier_ease(t):
     return t * t * (3 - 2 * t)
 
@@ -266,35 +269,41 @@ def run_test(num_tubes, name=None, wait=False):
     # for solution in solutions:
     #     print("{} Moves".format(len(solution)))
     for solution in solutions[:1]:
+        # solution = solution + [(b, a) for a, b in solution[::-1]]
         state = start_state
-        for tube_from, tube_to in solution:
-            keyframes = (
-                state.positions[tube_from][state.count(tube_from) - 1], state.positions[tube_from][state.height],
-                state.positions[tube_to][state.height], state.positions[tube_to][state.count(tube_to)]
-            )
-            radius = state.radius
-            color_key = state.top(tube_from)
-            color = state.colors[color_key]
-            color_key = str(key[color_key])
-            base_img = state.removeFrom(tube_from).show()
-            state = state.doMove(tube_from, tube_to)
-            if wait:
-                cv2.waitKey()
+        # while True:
+        if True:
+            for tube_from, tube_to in solution:
+                keyframes = (
+                    state.positions[tube_from][state.count(tube_from) - 1], state.positions[tube_from][state.height],
+                    state.positions[tube_to][state.height], state.positions[tube_to][state.count(tube_to)]
+                )
+                radius = state.radius
+                color_key = state.top(tube_from)
+                color = state.colors[color_key]
+                color_key = str(key[color_key])
+                base_img = state.removeFrom(tube_from).show()
+                state = state.doMove(tube_from, tube_to)
+                if wait:
+                    cv2.waitKey()
 
-            frames = (4, 12, 4)
-            framerate = 60
-            for p0, p1, frames in zip(keyframes, keyframes[1:], frames):
-                for i in range(frames):
-                    img = base_img.copy()
-                    t = i / (frames - 1)
-                    p = weighted_average(p0, p1, bezier_ease(t))
-                    p = tuple(int(i) for i in p)
-                    cv2.circle(img, center=p, radius=radius, color=color, thickness=-1)
-                    cv2.circle(img, center=p, radius=radius, color=(0, 0, 0), thickness=1)
-                    cv2.putText(img, color_key, (p[0] - 10, p[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
-                    cv2.imshow("Steps", img)
+                frames = (6, 12, 6)
+                # frames = (3, 6, 3)
+                framerate = 60
+                for p0, p1, frames in zip(keyframes, keyframes[1:], frames):
+                    # Uncomment for constant speed, leave commented for constant time
+                    # frames = int(math.dist(p0, p1) / 50)
+                    for i in range(frames):
+                        img = base_img.copy()
+                        t = i / (frames - 1)
+                        p = weighted_average(p0, p1, parametric_ease(t))
+                        p = tuple(int(i) for i in p)
+                        cv2.circle(img, center=p, radius=radius, color=color, thickness=-1)
+                        cv2.circle(img, center=p, radius=radius, color=(0, 0, 0), thickness=1)
+                        cv2.putText(img, color_key, (p[0] - 10, p[1] + 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0))
+                        cv2.imshow("Steps", img)
+                        cv2.waitKey(int(1000 / framerate))
                     cv2.waitKey(int(1000 / framerate))
-                cv2.waitKey(int(1000 / framerate))
 
         print(len(solution), "steps")
         cv2.waitKey()
@@ -307,8 +316,8 @@ if __name__ == "__main__":
     # cv2.setWindowProperty("Steps", cv2.WND_PROP_TOPMOST, 1)
     cv2.moveWindow("Steps", 425, 0)
     cv2.moveWindow("screenshot", 425 * 2, 0)
-    # run_test(15, "5-3")
-    for i in range(5, 16):
-        if i == 13:
-            continue
-        run_test(i)
+    run_test("5-3")
+    # for i in range(5, 16):
+    #     if i == 13:
+    #         continue
+    #     run_test(i)
