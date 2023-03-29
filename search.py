@@ -113,6 +113,7 @@ def genericSearch(problem, cost_funct=lambda node: 0, depth_limit=float('inf'), 
         # print(node)
         if problem.isGoalState(node.state):
             print("Found goal state:\n{}".format(node))
+            print("Closed: {}\nFringe: {}\nSolutions: {}".format(len(closed), len(fringe), len(solutions)))
             if find_all:
                 solutions.append(node.path)
                 continue
