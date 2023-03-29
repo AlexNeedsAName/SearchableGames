@@ -10,6 +10,7 @@ import numpy as np
 
 import search
 import autogame
+from animation import weighted_average, parametric_ease
 
 key = [str(i)[0] for i in range(0, 10)] \
       + [chr(i) for i in range(ord('A'), ord('Z') + 1)] \
@@ -158,13 +159,11 @@ class BubbleSortGame:
             # Draw test tube border
             cv2.line(self.blank, (int(cx - b), int(cy)), (int(cx - b), int(cy + offset)), (0, 0, 0), 1, cv2.LINE_AA)
             cv2.line(self.blank, (int(cx + b), int(cy)), (int(cx + b), int(cy + offset)), (0, 0, 0), 1, cv2.LINE_AA)
-            cv2.ellipse(self.blank, (int(cx), int(cy + offset)), (int(b), int(b)), 0, 0, 180, (0, 0, 0), 1, cv2.LINE_AA)
+            cv2.ellipse(self.blank, (int(cx), int(cy+offset)), (int(b), int(b)), 0, 0, 180, (0, 0, 0), 1, cv2.LINE_AA)
 
             # Draw test tube top
-            cv2.line(self.blank, (int(x + h / 2), int(cy)), (int(x + w - h / 2), int(cy)), (0, 0, 0), thickness=h + 2,
-                     lineType=cv2.LINE_AA)
-            cv2.line(self.blank, (int(x + h / 2), int(cy)), (int(x + w - h / 2), int(cy)), (238, 192, 87), thickness=h,
-                     lineType=cv2.LINE_AA)
+            cv2.line(self.blank, (int(x + h / 2), int(cy)), (int(x + w - h / 2), int(cy)), (0, 0, 0), thickness=h + 2, lineType=cv2.LINE_AA)
+            cv2.line(self.blank, (int(x + h / 2), int(cy)), (int(x + w - h / 2), int(cy)), (238, 192, 87), thickness=h, lineType=cv2.LINE_AA)
 
             x = int(x + w / 2)
             y = cy + offset
@@ -232,8 +231,7 @@ class BubbleSortGame:
                 color = self.colors[color_key]
                 cv2.circle(img, center=(x, y), radius=self.radius, color=color, thickness=-1, lineType=cv2.LINE_AA)
                 cv2.circle(img, center=(x, y), radius=self.radius, color=(0, 0, 0), thickness=1, lineType=cv2.LINE_AA)
-                cv2.putText(img, str(key[color_key]), (x - 10, y + 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1,
-                            cv2.LINE_AA)
+                cv2.putText(img, str(key[color_key]), (x - 10, y + 10), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 1, cv2.LINE_AA)
         return img
 
     def __str__(self):
@@ -263,19 +261,6 @@ def minimize_color_changes(state, problem=None):
                 approx += 1
                 last = ball
     return approx
-
-
-def parametric_ease(t):
-    sqt = t * t
-    return sqt / (2 * (sqt - t) + 1)
-
-
-def bezier_ease(t):
-    return t * t * (3 - 2 * t)
-
-
-def weighted_average(t1, t2, w):
-    return tuple(x * (1 - w) + y * w for x, y in zip(t1, t2))
 
 
 def run_test(source, wait=False, do_actions=False):
@@ -324,7 +309,7 @@ def run_test(source, wait=False, do_actions=False):
             frames = (6, 12, 6)
             # frames = (3, 6, 3)
             # frames = (2, 2, 2)
-            frameratwe = 60
+            framerate = 60
             for p0, p1, frames in zip(keyframes, keyframes[1:], frames):
                 # Uncomment for constant speed, leave commented for constant time
                 # frames = int(math.dist(p0, p1) / 50)
